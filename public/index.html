@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LoopTrack</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #f8f9fa;
+      --bg-card: #ffffff;
+      --border: #e2e8f0;
+      --text: #1a202c;
+      --text-dim: #64748b;
+      --accent: #6366f1;
+      --green: #059669;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    h1 { font-size: 1.75rem; color: var(--text); }
+    .header-actions { display: flex; gap: 0.5rem; }
+    .btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary { background: var(--bg-card); color: var(--text); border: 1px solid var(--border); }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 0.25rem;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab {
+      padding: 0.75rem 1.25rem;
+      cursor: pointer;
+      border: none;
+      background: none;
+      color: var(--text-dim);
+      font-size: 0.875rem;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Stats */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+    .stat-value { font-size: 1.5rem; font-weight: 600; }
+    .stat-value.cost { color: var(--green); }
+
+    /* Charts */
+    .charts {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    @media (max-width: 800px) { .charts { grid-template-columns: 1fr; } }
+    .chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .chart-title { font-size: 0.875rem; color: var(--text-dim); margin-bottom: 1rem; }
+    .chart-container { height: 250px; }
+
+    /* Tables */
+    .table-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      margin-bottom: 1.5rem;
+    }
+    .table-header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.875rem;
+      font-weight: 500;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left;
+      padding: 0.75rem 1.25rem;
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      background: var(--bg);
+      font-weight: 500;
+    }
+    td { padding: 0.75rem 1.25rem; border-top: 1px solid var(--border); font-size: 0.875rem; }
+    tr:hover td { background: rgba(99, 102, 241, 0.03); }
+
+    .project-name { color: var(--accent); font-weight: 500; word-break: break-word; }
+    .project-path { font-family: monospace; font-size: 0.75rem; color: var(--text-dim); margin-top: 0.25rem; word-break: break-all; }
+    .tokens { color: var(--text-dim); font-family: monospace; }
+    .cost { color: var(--green); font-family: monospace; font-weight: 500; }
+    .date { color: var(--text-dim); }
+    .empty { text-align: center; padding: 3rem; color: var(--text-dim); }
+    .last-sync { font-size: 0.75rem; color: var(--text-dim); }
+
+    /* Daily breakdown */
+    .day-row { cursor: pointer; }
+    .day-row:hover td { background: rgba(99, 102, 241, 0.05); }
+    .day-details { display: none; background: var(--bg); }
+    .day-details.open { display: table-row; }
+    .day-details td { padding: 0; }
+    .day-projects { padding: 1rem 1.25rem 1rem 3rem; }
+    .day-project {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.875rem;
+    }
+    .day-project:last-child { border-bottom: none; }
+    .expand-icon { color: var(--text-dim); margin-right: 0.5rem; transition: transform 0.2s; }
+    .day-row.open .expand-icon { transform: rotate(90deg); }
+
+    /* Groups config */
+    .groups-section { margin-top: 1.5rem; }
+    .group-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .group-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+    .group-name {
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .group-name input {
+      border: 1px solid var(--border);
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.875rem;
+    }
+    .group-paths { font-size: 0.8rem; }
+    .group-path {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.25rem 0;
+      font-family: monospace;
+      color: var(--text-dim);
+    }
+    .group-path button {
+      background: none;
+      border: none;
+      color: #ef4444;
+      cursor: pointer;
+      font-size: 0.75rem;
+    }
+    .add-path {
+      margin-top: 0.5rem;
+      display: flex;
+      gap: 0.5rem;
+    }
+    .add-path input {
+      flex: 1;
+      border: 1px solid var(--border);
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-family: monospace;
+    }
+    .add-path button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 0.25rem 0.75rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75rem;
+    }
+    .add-group-btn {
+      background: var(--bg-card);
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      width: 100%;
+      cursor: pointer;
+      color: var(--text-dim);
+      font-size: 0.875rem;
+    }
+    .add-group-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .delete-group { background: none; border: none; color: #ef4444; cursor: pointer; }
+
+    /* Group stats */
+    .group-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .group-stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .group-stat-name { font-weight: 500; margin-bottom: 0.5rem; }
+    .group-stat-cost { font-size: 1.25rem; color: var(--green); font-weight: 600; }
+    .group-stat-sessions { font-size: 0.75rem; color: var(--text-dim); }
+
+    /* Project grid items */
+    .project-item {
+      padding: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .project-item:hover { border-color: var(--accent); background: rgba(99,102,241,0.03); }
+    .project-item.in-group { border-color: var(--accent); background: rgba(99,102,241,0.08); }
+    .project-item.in-other { opacity: 0.5; }
+    .project-item .pi-name { font-weight: 500; font-size: 0.875rem; word-break: break-word; }
+    .project-item .pi-path { font-family: monospace; font-size: 0.7rem; color: var(--text-dim); margin-top: 0.25rem; word-break: break-all; }
+    .project-item .pi-meta { display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-dim); }
+    .project-item .pi-group { font-size: 0.7rem; color: var(--accent); margin-top: 0.25rem; }
+
+    /* Token bar */
+    .token-bar { height: 6px; background: var(--border); border-radius: 3px; margin-top: 0.5rem; overflow: hidden; }
+    .token-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; }
+
+    /* Retention setting */
+    .retention-setting {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      padding: 0.4rem 0.75rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+    .retention-setting:hover { border-color: var(--accent); }
+    .retention-setting.warning { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>LoopTrack</h1>
+        <p class="last-sync">Last sync: <span id="lastSync">Never</span></p>
+      </div>
+      <div class="header-actions">
+        <select id="machineFilter" onchange="applyMachineFilter()" style="padding:0.4rem 0.75rem;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;background:var(--bg-card);">
+          <option value="">All Machines</option>
+        </select>
+        <div class="retention-setting" id="retentionSetting" onclick="showRetentionDialog()" title="Claude history retention setting">
+          <span style="font-size:0.7rem;color:var(--text-dim);">Retention:</span>
+          <span id="retentionDays" style="font-weight:500;">—</span>
+        </div>
+        <button class="btn" id="syncBtn" onclick="doSync()">Sync</button>
+      </div>
+    </header>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="summary">Summary</button>
+      <button class="tab" data-tab="daily">Daily</button>
+      <button class="tab" data-tab="groups">Groups</button>
+    </div>
+
+    <!-- Summary Tab -->
+    <div class="tab-content active" id="tab-summary">
+      <!-- Group breakdown cards -->
+      <div class="group-stats" id="summaryGroupStats"></div>
+
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-label">Total Cost</div>
+          <div class="stat-value cost" id="totalCost">$0.00</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Sessions</div>
+          <div class="stat-value" id="totalSessions">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Input Tokens</div>
+          <div class="stat-value" id="inputTokens">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Output Tokens</div>
+          <div class="stat-value" id="outputTokens">0</div>
+        </div>
+      </div>
+
+      <!-- Last 5 days by group -->
+      <div class="table-card">
+        <div class="table-header">Last 5 Days by Group</div>
+        <div id="last5DaysGroups" style="padding:1rem;"></div>
+      </div>
+
+      <div class="charts">
+        <div class="chart-card">
+          <div class="chart-title">Daily Tokens (Last 30 Days)</div>
+          <div class="chart-container"><canvas id="dailyChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Tokens by Group</div>
+          <div class="chart-container"><canvas id="groupChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Last 3 sessions as cards -->
+      <div style="margin-bottom:1.5rem;">
+        <div style="font-size:0.875rem;font-weight:500;margin-bottom:0.75rem;color:var(--text-dim);">Recent Sessions</div>
+        <div id="recentSessionCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem;"></div>
+      </div>
+    </div>
+
+    <!-- Daily Tab -->
+    <div class="tab-content" id="tab-daily">
+      <div class="stats" id="dailyStats"></div>
+      <div class="table-card">
+        <div class="table-header">Daily Breakdown by Group</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Sessions</th>
+              <th style="width:40%">Token Usage by Group</th>
+              <th>Total Tokens</th>
+              <th>Cost</th>
+            </tr>
+          </thead>
+          <tbody id="dailyTable"></tbody>
+        </table>
+      </div>
+
+      <!-- Full sessions table -->
+      <div class="table-card">
+        <div class="table-header">All Sessions</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Machine</th>
+              <th>Group</th>
+              <th>Project</th>
+              <th>Tokens</th>
+              <th>Cost</th>
+            </tr>
+          </thead>
+          <tbody id="sessionsTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Groups Tab -->
+    <div class="tab-content" id="tab-groups">
+      <div class="group-stats" id="groupStats"></div>
+
+      <div class="table-card">
+        <div class="table-header">
+          <div style="display:flex;align-items:center;gap:1rem;">
+            <span>Assign Projects to Group:</span>
+            <select id="activeGroup" onchange="renderGroups()" style="padding:0.4rem 0.75rem;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;">
+              <option value="">Select a group...</option>
+            </select>
+            <button class="btn btn-secondary" onclick="addGroup()" style="font-size:0.75rem;padding:0.4rem 0.75rem;">+ New Group</button>
+          </div>
+          <button class="btn" onclick="saveGroups()">Save</button>
+        </div>
+        <div style="padding:0.5rem 1rem;font-size:0.75rem;color:var(--text-dim);border-bottom:1px solid var(--border);">
+          Click projects below to add/remove from the selected group. Groups saved to <code>config.json</code>.
+        </div>
+        <div id="projectGrid" style="padding:1rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0.75rem;"></div>
+      </div>
+
+      <div class="table-card" id="groupMembersCard" style="display:none;">
+        <div class="table-header">
+          <span>Group Members: <strong id="groupMembersTitle"></strong></span>
+          <button class="btn btn-secondary" onclick="deleteGroup(document.getElementById('activeGroup').value)" style="font-size:0.75rem;padding:0.4rem 0.75rem;color:#ef4444;">Delete Group</button>
+        </div>
+        <div id="groupMembersList" style="padding:1rem;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let dailyChart, projectChart;
+    let appData = { sessions: {}, config: { projectGroups: {} }, machines: [] };
+    let selectedMachine = ''; // '' = all machines
+
+    // Tabs
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+      });
+    });
+
+    function formatTokens(n) {
+      if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+      return n.toString();
+    }
+
+    function formatCost(n) {
+      return '$' + n.toFixed(2);
+    }
+
+    function getProjectGroup(projectPath) {
+      const groups = appData.config?.projectGroups || {};
+      const projectName = getProjectName(projectPath);
+      for (const [groupName, patterns] of Object.entries(groups)) {
+        // Match by project name (not full path) for cross-machine compatibility
+        if (patterns.some(p => {
+          const patternName = p.split('/').pop(); // Get last part of pattern
+          return projectName === patternName || projectPath?.includes(p);
+        })) {
+          return groupName;
+        }
+      }
+      return null;
+    }
+
+    function getProjectName(projectPath) {
+      if (!projectPath) return 'Unknown';
+      return projectPath.split('/').pop() || projectPath;
+    }
+
+    function getFilteredSessions() {
+      const sessions = Object.values(appData.sessions || {});
+      if (!selectedMachine) return sessions;
+      return sessions.filter(s => s.machineId === selectedMachine);
+    }
+
+    function updateMachineDropdown() {
+      const select = document.getElementById('machineFilter');
+      const machines = appData.machines || [];
+      const currentVal = select.value;
+
+      select.innerHTML = '<option value="">All Machines</option>' +
+        machines.map(m => `<option value="${m}" ${m === currentVal ? 'selected' : ''}>${m}${m === appData.currentMachine ? ' (this)' : ''}</option>`).join('');
+    }
+
+    function applyMachineFilter() {
+      selectedMachine = document.getElementById('machineFilter').value;
+      renderSummary();
+      renderDaily();
+      renderGroups();
+    }
+
+    async function loadData() {
+      try {
+        const res = await fetch('/api/data');
+        appData = await res.json();
+        updateMachineDropdown();
+        renderSummary();
+        renderDaily();
+        renderGroups();
+      } catch (err) {
+        console.error('Failed to load data:', err);
+      }
+    }
+
+    async function doSync() {
+      const btn = document.getElementById('syncBtn');
+      btn.disabled = true;
+      btn.textContent = 'Syncing...';
+      try {
+        const res = await fetch('/api/sync', { method: 'POST' });
+        appData = await res.json();
+        updateMachineDropdown();
+        renderSummary();
+        renderDaily();
+        renderGroups();
+      } catch (err) {
+        console.error('Sync failed:', err);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sync';
+      }
+    }
+
+    function renderSummary() {
+      const sessions = getFilteredSessions();
+      const groups = appData.config?.projectGroups || {};
+
+      const totalCost = sessions.reduce((sum, s) => sum + (s.totalCost || 0), 0);
+      const inputTokens = sessions.reduce((sum, s) => sum + (s.inputTokens || 0), 0);
+      const outputTokens = sessions.reduce((sum, s) => sum + (s.outputTokens || 0), 0);
+      const totalTokens = inputTokens + outputTokens;
+
+      document.getElementById('totalCost').textContent = formatCost(totalCost);
+      document.getElementById('totalSessions').textContent = sessions.length;
+      document.getElementById('inputTokens').textContent = formatTokens(inputTokens);
+      document.getElementById('outputTokens').textContent = formatTokens(outputTokens);
+      document.getElementById('lastSync').textContent = appData.lastSync
+        ? new Date(appData.lastSync).toLocaleString()
+        : 'Never';
+
+      // Calculate group totals
+      const groupTotals = {};
+      sessions.forEach(s => {
+        const path = s.projectPath || 'Unknown';
+        const group = getProjectGroup(path) || 'Ungrouped';
+        if (!groupTotals[group]) {
+          groupTotals[group] = { tokens: 0, cost: 0, sessions: 0 };
+        }
+        groupTotals[group].tokens += (s.inputTokens || 0) + (s.outputTokens || 0);
+        groupTotals[group].cost += s.totalCost || 0;
+        groupTotals[group].sessions++;
+      });
+
+      // Render group stats cards at top (filter out Ungrouped)
+      const sortedGroups = Object.entries(groupTotals).sort((a, b) => b[1].tokens - a[1].tokens);
+      document.getElementById('summaryGroupStats').innerHTML = sortedGroups
+        .filter(([name]) => name !== 'Ungrouped')
+        .map(([name, data]) => {
+          const pct = totalTokens > 0 ? ((data.tokens / totalTokens) * 100).toFixed(0) : 0;
+          return `
+            <div class="group-stat-card">
+              <div class="group-stat-name">${name}</div>
+              <div class="group-stat-cost">${formatTokens(data.tokens)}</div>
+              <div class="group-stat-sessions">${pct}% · ${data.sessions} sessions · ${formatCost(data.cost)}</div>
+            </div>
+          `;
+        }).join('');
+
+      // Charts - daily tokens
+      const dailyTokens = {};
+      sessions.forEach(s => {
+        const date = (s.lastActivity || s.startTime || '').split('T')[0];
+        if (date) dailyTokens[date] = (dailyTokens[date] || 0) + (s.inputTokens || 0) + (s.outputTokens || 0);
+      });
+
+      const last30 = [];
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().split('T')[0];
+        last30.push({ date: key, tokens: dailyTokens[key] || 0 });
+      }
+      renderDailyChart(last30);
+
+      // Group chart - filter out Ungrouped
+      const chartGroups = sortedGroups.filter(([name]) => name !== 'Ungrouped').slice(0, 8);
+      renderGroupChart(chartGroups);
+
+      // Last 5 days by group (no Ungrouped)
+      renderLast5DaysByGroup();
+
+      // Last 3 session cards
+      const sorted = sessions
+        .sort((a, b) => (b.lastActivity || '').localeCompare(a.lastActivity || ''))
+        .slice(0, 3);
+
+      const cardsContainer = document.getElementById('recentSessionCards');
+      cardsContainer.innerHTML = sorted.map(s => {
+        const date = (s.lastActivity || '').split('T')[0];
+        const path = s.projectPath || 'Unknown';
+        const name = path.split('/').pop() || path;
+        const group = getProjectGroup(path);
+        const tokens = (s.inputTokens || 0) + (s.outputTokens || 0);
+        const machine = s.machineId || '';
+        return `
+          <div class="stat-card" style="padding:1rem;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.5rem;">
+              <div class="project-name" style="font-size:0.9rem;">${name}</div>
+              <div style="text-align:right;">
+                <div class="date" style="font-size:0.75rem;">${date}</div>
+                ${machine ? `<div style="font-size:0.65rem;color:var(--text-dim);">${machine}</div>` : ''}
+              </div>
+            </div>
+            ${group ? `<div style="font-size:0.75rem;color:var(--accent);margin-bottom:0.25rem;">${group}</div>` : ''}
+            <div class="project-path" style="font-size:0.7rem;margin-bottom:0.5rem;">${path}</div>
+            <div style="display:flex;justify-content:space-between;font-size:0.8rem;">
+              <span class="tokens">${formatTokens(tokens)} tokens</span>
+              <span class="cost">${formatCost(s.totalCost || 0)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderLast5DaysByGroup() {
+      const sessions = getFilteredSessions();
+      const groups = appData.config?.projectGroups || {};
+      const groupNames = Object.keys(groups);
+      if (groupNames.length === 0) {
+        document.getElementById('last5DaysGroups').innerHTML = '<div style="color:var(--text-dim);font-size:0.875rem;">No groups configured. Add groups in the Groups tab.</div>';
+        return;
+      }
+
+      // Build daily group data
+      const dailyGroups = {};
+      sessions.forEach(s => {
+        const date = (s.lastActivity || '').split('T')[0];
+        const path = s.projectPath || 'Unknown';
+        const group = getProjectGroup(path);
+        if (!date || !group) return; // Skip if no group
+
+        if (!dailyGroups[date]) dailyGroups[date] = {};
+        if (!dailyGroups[date][group]) dailyGroups[date][group] = { tokens: 0, cost: 0 };
+        dailyGroups[date][group].tokens += (s.inputTokens || 0) + (s.outputTokens || 0);
+        dailyGroups[date][group].cost += s.totalCost || 0;
+      });
+
+      // Get last 5 days with data
+      const sortedDates = Object.keys(dailyGroups).sort((a, b) => b.localeCompare(a)).slice(0, 5);
+
+      const colorMap = {};
+      groupNames.forEach((g, i) => colorMap[g] = groupColors[i % groupColors.length]);
+
+      const container = document.getElementById('last5DaysGroups');
+      container.innerHTML = sortedDates.map(date => {
+        const dayData = dailyGroups[date];
+        const dayTotal = Object.values(dayData).reduce((sum, g) => sum + g.tokens, 0);
+
+        const groupBars = Object.entries(dayData)
+          .sort((a, b) => b[1].tokens - a[1].tokens)
+          .map(([name, data]) => {
+            const pct = dayTotal > 0 ? ((data.tokens / dayTotal) * 100).toFixed(0) : 0;
+            const color = colorMap[name] || '#64748b';
+            return `
+              <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem;">
+                <div style="width:10px;height:10px;border-radius:2px;background:${color};"></div>
+                <span style="font-size:0.8rem;min-width:80px;">${name}</span>
+                <div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;">
+                  <div style="width:${pct}%;height:100%;background:${color};"></div>
+                </div>
+                <span style="font-size:0.75rem;color:var(--text-dim);min-width:60px;text-align:right;">${formatTokens(data.tokens)}</span>
+              </div>
+            `;
+          }).join('');
+
+        return `
+          <div style="margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid var(--border);">
+            <div style="display:flex;justify-content:space-between;margin-bottom:0.5rem;">
+              <span style="font-weight:500;">${date}</span>
+              <span style="font-size:0.8rem;color:var(--text-dim);">${formatTokens(dayTotal)} total</span>
+            </div>
+            ${groupBars}
+          </div>
+        `;
+      }).join('');
+    }
+
+    const groupColors = ['#6366f1', '#8b5cf6', '#a855f7', '#10b981', '#f59e0b', '#ef4444', '#0ea5e9', '#ec4899'];
+
+    function renderDaily() {
+      const sessions = getFilteredSessions();
+      const configGroups = Object.keys(appData.config?.projectGroups || {});
+
+      // Group by date
+      const daily = {};
+      let totalTokensAllTime = 0;
+      sessions.forEach(s => {
+        const date = (s.lastActivity || '').split('T')[0];
+        if (!date) return;
+        if (!daily[date]) {
+          daily[date] = { date, sessions: 0, totalCost: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, groups: {}, projects: {} };
+        }
+        daily[date].sessions++;
+        daily[date].totalCost += s.totalCost || 0;
+        daily[date].inputTokens += s.inputTokens || 0;
+        daily[date].outputTokens += s.outputTokens || 0;
+        daily[date].totalTokens += (s.inputTokens || 0) + (s.outputTokens || 0);
+        totalTokensAllTime += (s.inputTokens || 0) + (s.outputTokens || 0);
+
+        const path = s.projectPath || 'Unknown';
+        const group = getProjectGroup(path) || 'Ungrouped';
+
+        // Track by group
+        if (!daily[date].groups[group]) {
+          daily[date].groups[group] = { tokens: 0, cost: 0, sessions: 0 };
+        }
+        daily[date].groups[group].tokens += (s.inputTokens || 0) + (s.outputTokens || 0);
+        daily[date].groups[group].cost += s.totalCost || 0;
+        daily[date].groups[group].sessions++;
+
+        // Track by project
+        if (!daily[date].projects[path]) {
+          daily[date].projects[path] = { name: path.split('/').pop(), path, group, cost: 0, sessions: 0, tokens: 0 };
+        }
+        daily[date].projects[path].cost += s.totalCost || 0;
+        daily[date].projects[path].sessions++;
+        daily[date].projects[path].tokens += (s.inputTokens || 0) + (s.outputTokens || 0);
+      });
+
+      const sorted = Object.values(daily).sort((a, b) => b.date.localeCompare(a.date));
+      const maxTokens = Math.max(...sorted.map(d => d.totalTokens), 1);
+
+      // Daily summary stats
+      const today = new Date().toISOString().split('T')[0];
+      const todayData = daily[today] || { totalTokens: 0, totalCost: 0, sessions: 0 };
+      const last7Days = sorted.slice(0, 7);
+      const last7Tokens = last7Days.reduce((sum, d) => sum + d.totalTokens, 0);
+      const last7Cost = last7Days.reduce((sum, d) => sum + d.totalCost, 0);
+
+      document.getElementById('dailyStats').innerHTML = `
+        <div class="stat-card">
+          <div class="stat-label">Today</div>
+          <div class="stat-value">${formatTokens(todayData.totalTokens)}</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.25rem;">${formatCost(todayData.totalCost)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Last 7 Days</div>
+          <div class="stat-value">${formatTokens(last7Tokens)}</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.25rem;">${formatCost(last7Cost)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Avg/Day (7d)</div>
+          <div class="stat-value">${formatTokens(Math.round(last7Tokens / 7))}</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.25rem;">${formatCost(last7Cost / 7)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">All Time</div>
+          <div class="stat-value">${formatTokens(totalTokensAllTime)}</div>
+        </div>
+      `;
+
+      // Build color map for groups
+      const allGroups = [...new Set(sorted.flatMap(d => Object.keys(d.groups)))];
+      const groupColorMap = {};
+      allGroups.forEach((g, i) => groupColorMap[g] = groupColors[i % groupColors.length]);
+
+      const tbody = document.getElementById('dailyTable');
+      tbody.innerHTML = sorted.map((d, i) => {
+        const pct = ((d.totalTokens / maxTokens) * 100).toFixed(0);
+
+        // Create stacked bar segments for groups
+        const sortedGroups = Object.entries(d.groups).sort((a, b) => b[1].tokens - a[1].tokens);
+        let stackedBar = '';
+        sortedGroups.forEach(([groupName, groupData]) => {
+          const groupPct = d.totalTokens > 0 ? ((groupData.tokens / d.totalTokens) * 100) : 0;
+          const color = groupColorMap[groupName];
+          stackedBar += `<div style="width:${groupPct}%;background:${color};height:100%;" title="${groupName}: ${formatTokens(groupData.tokens)}"></div>`;
+        });
+
+        // Group breakdown rows
+        const groupRows = sortedGroups.map(([groupName, groupData]) => {
+          const groupPct = d.totalTokens > 0 ? ((groupData.tokens / d.totalTokens) * 100).toFixed(0) : 0;
+          const color = groupColorMap[groupName];
+          const projectsInGroup = Object.values(d.projects).filter(p => p.group === groupName).sort((a, b) => b.tokens - a.tokens);
+
+          return `
+            <div style="margin-bottom:1rem;">
+              <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+                <div style="width:12px;height:12px;border-radius:3px;background:${color};"></div>
+                <span style="font-weight:600;">${groupName}</span>
+                <span style="color:var(--text-dim);font-size:0.8rem;">${formatTokens(groupData.tokens)} (${groupPct}%)</span>
+              </div>
+              ${projectsInGroup.map(p => {
+                const projPct = groupData.tokens > 0 ? ((p.tokens / groupData.tokens) * 100).toFixed(0) : 0;
+                return `
+                  <div class="day-project" style="margin-left:1.5rem;">
+                    <div style="flex:1">
+                      <div class="project-name">${p.name}</div>
+                      <div class="project-path">${p.path}</div>
+                    </div>
+                    <div style="text-align:right;min-width:80px;">
+                      <div style="font-weight:500;">${formatTokens(p.tokens)}</div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <tr class="day-row" onclick="toggleDay(${i})">
+            <td><span class="expand-icon">▶</span>${d.date}</td>
+            <td>${d.sessions}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:0.75rem;">
+                <div class="token-bar" style="flex:1;display:flex;overflow:hidden;">${stackedBar}</div>
+              </div>
+            </td>
+            <td class="tokens">${formatTokens(d.totalTokens)}</td>
+            <td class="cost">${formatCost(d.totalCost)}</td>
+          </tr>
+          <tr class="day-details" id="day-${i}">
+            <td colspan="5">
+              <div class="day-projects">${groupRows}</div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // Sessions table (now in Daily tab)
+      const sortedSessions = sessions
+        .sort((a, b) => (b.lastActivity || '').localeCompare(a.lastActivity || ''))
+        .slice(0, 50);
+
+      const sessionsBody = document.getElementById('sessionsTable');
+      if (sortedSessions.length === 0) {
+        sessionsBody.innerHTML = '<tr><td colspan="6" class="empty">No data yet. Click Sync.</td></tr>';
+      } else {
+        sessionsBody.innerHTML = sortedSessions.map(s => {
+          const date = (s.lastActivity || '').split('T')[0];
+          const path = s.projectPath || 'Unknown';
+          const name = path.split('/').pop() || path;
+          const group = getProjectGroup(path) || '—';
+          const tokens = (s.inputTokens || 0) + (s.outputTokens || 0);
+          const machine = s.machineId || '—';
+          return `<tr>
+            <td class="date">${date}</td>
+            <td style="font-size:0.8rem;color:var(--text-dim);">${machine}</td>
+            <td><span style="color:var(--accent);font-weight:500;">${group}</span></td>
+            <td>
+              <div class="project-name">${name}</div>
+              <div class="project-path">${path}</div>
+            </td>
+            <td class="tokens">${formatTokens(tokens)}</td>
+            <td class="cost">${formatCost(s.totalCost || 0)}</td>
+          </tr>`;
+        }).join('');
+      }
+    }
+
+    function toggleDay(i) {
+      const row = document.querySelector(`.day-row:nth-child(${i * 2 + 1})`);
+      const details = document.getElementById('day-' + i);
+      row.classList.toggle('open');
+      details.classList.toggle('open');
+    }
+
+    function renderGroups() {
+      const sessions = getFilteredSessions();
+      const groups = appData.config?.projectGroups || {};
+      const activeGroup = document.getElementById('activeGroup').value;
+
+      // Group stats
+      const groupTotals = { Ungrouped: { cost: 0, sessions: 0, tokens: 0 } };
+      Object.keys(groups).forEach(g => groupTotals[g] = { cost: 0, sessions: 0, tokens: 0 });
+
+      const projectTotals = {};
+      sessions.forEach(s => {
+        const path = s.projectPath || 'Unknown';
+        const group = getProjectGroup(path) || 'Ungrouped';
+        groupTotals[group] = groupTotals[group] || { cost: 0, sessions: 0, tokens: 0 };
+        groupTotals[group].cost += s.totalCost || 0;
+        groupTotals[group].sessions++;
+        groupTotals[group].tokens += (s.inputTokens || 0) + (s.outputTokens || 0);
+
+        if (!projectTotals[path]) {
+          projectTotals[path] = { path, name: path.split('/').pop(), cost: 0, sessions: 0, tokens: 0 };
+        }
+        projectTotals[path].cost += s.totalCost || 0;
+        projectTotals[path].sessions++;
+        projectTotals[path].tokens += (s.inputTokens || 0) + (s.outputTokens || 0);
+      });
+
+      // Render group stats cards
+      document.getElementById('groupStats').innerHTML = Object.entries(groupTotals)
+        .filter(([_, v]) => v.sessions > 0)
+        .sort((a, b) => b[1].cost - a[1].cost)
+        .map(([name, data]) => `
+          <div class="group-stat-card" style="cursor:pointer" onclick="document.getElementById('activeGroup').value='${name}';renderGroups();">
+            <div class="group-stat-name">${name}</div>
+            <div class="group-stat-cost">${formatCost(data.cost)}</div>
+            <div class="group-stat-sessions">${data.sessions} sessions · ${formatTokens(data.tokens)} tokens</div>
+          </div>
+        `).join('');
+
+      // Update group dropdown
+      const select = document.getElementById('activeGroup');
+      const currentVal = select.value;
+      select.innerHTML = '<option value="">Select a group...</option>' +
+        Object.keys(groups).map(g => `<option value="${g}" ${g === currentVal ? 'selected' : ''}>${g}</option>`).join('');
+
+      // Render clickable project grid
+      const projectGrid = document.getElementById('projectGrid');
+      const sortedProjects = Object.values(projectTotals).sort((a, b) => b.cost - a.cost);
+
+      projectGrid.innerHTML = sortedProjects.map(p => {
+        const currentGroup = getProjectGroup(p.path);
+        const inActiveGroup = activeGroup && currentGroup === activeGroup;
+        const inOtherGroup = activeGroup && currentGroup && currentGroup !== activeGroup;
+
+        let classes = 'project-item';
+        if (inActiveGroup) classes += ' in-group';
+        if (inOtherGroup) classes += ' in-other';
+
+        return `
+          <div class="${classes}" onclick="toggleProjectGroup('${p.path}')">
+            <div class="pi-name">${p.name}</div>
+            <div class="pi-path">${p.path}</div>
+            ${currentGroup ? `<div class="pi-group">${currentGroup}</div>` : ''}
+            <div class="pi-meta">
+              <span>${p.sessions} sessions</span>
+              <span class="cost">${formatCost(p.cost)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Show group members panel
+      const membersCard = document.getElementById('groupMembersCard');
+      if (activeGroup && groups[activeGroup]) {
+        membersCard.style.display = 'block';
+        document.getElementById('groupMembersTitle').textContent = activeGroup;
+        const members = groups[activeGroup];
+        document.getElementById('groupMembersList').innerHTML = members.length === 0
+          ? '<div style="color:var(--text-dim);font-size:0.875rem;">No projects in this group yet. Click projects above to add them.</div>'
+          : members.map(p => `
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+                <code style="font-size:0.8rem;">${p}</code>
+                <button onclick="removePath('${activeGroup}','${p}')" style="background:none;border:none;color:#ef4444;cursor:pointer;">Remove</button>
+              </div>
+            `).join('');
+      } else {
+        membersCard.style.display = 'none';
+      }
+    }
+
+    function toggleProjectGroup(projectPath) {
+      const activeGroup = document.getElementById('activeGroup').value;
+      if (!activeGroup) {
+        alert('Please select a group first');
+        return;
+      }
+
+      const groups = appData.config.projectGroups;
+      const currentGroup = getProjectGroup(projectPath);
+
+      if (currentGroup === activeGroup) {
+        // Remove from group
+        groups[activeGroup] = groups[activeGroup].filter(p => !projectPath.startsWith(p) && p !== projectPath);
+      } else if (currentGroup) {
+        // Move from one group to another
+        groups[currentGroup] = groups[currentGroup].filter(p => !projectPath.startsWith(p) && p !== projectPath);
+        groups[activeGroup].push(projectPath);
+      } else {
+        // Add to group
+        groups[activeGroup].push(projectPath);
+      }
+
+      renderGroups();
+    }
+
+    function addGroup() {
+      const name = prompt('Group name:');
+      if (!name) return;
+      appData.config.projectGroups = appData.config.projectGroups || {};
+      appData.config.projectGroups[name] = [];
+      renderGroups();
+      document.getElementById('activeGroup').value = name;
+      renderGroups();
+    }
+
+    function deleteGroup(name) {
+      if (!name || !confirm(`Delete group "${name}"?`)) return;
+      delete appData.config.projectGroups[name];
+      document.getElementById('activeGroup').value = '';
+      renderGroups();
+    }
+
+    function renameGroup(oldName, newName) {
+      if (!newName || oldName === newName) return;
+      const paths = appData.config.projectGroups[oldName];
+      delete appData.config.projectGroups[oldName];
+      appData.config.projectGroups[newName] = paths;
+      renderGroups();
+    }
+
+    function addPath(groupName) {
+      const input = document.getElementById('newpath-' + groupName);
+      const path = input.value.trim();
+      if (!path) return;
+      appData.config.projectGroups[groupName].push(path);
+      input.value = '';
+      renderGroups();
+    }
+
+    function removePath(groupName, path) {
+      appData.config.projectGroups[groupName] = appData.config.projectGroups[groupName].filter(p => p !== path);
+      renderGroups();
+    }
+
+    async function saveGroups() {
+      try {
+        await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(appData.config)
+        });
+        alert('Groups saved!');
+        renderGroups();
+      } catch (err) {
+        alert('Failed to save: ' + err.message);
+      }
+    }
+
+    function renderDailyChart(data) {
+      const ctx = document.getElementById('dailyChart').getContext('2d');
+      if (dailyChart) dailyChart.destroy();
+      dailyChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: data.map(d => d.date.slice(5)),
+          datasets: [{ data: data.map(d => d.tokens || d.cost || 0), backgroundColor: 'rgba(99, 102, 241, 0.6)', borderRadius: 4 }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: '#64748b', maxRotation: 45 } },
+            y: { grid: { color: '#e2e8f0' }, ticks: { color: '#64748b', callback: v => formatTokens(v) } }
+          }
+        }
+      });
+    }
+
+    function renderGroupChart(data) {
+      const ctx = document.getElementById('groupChart').getContext('2d');
+      if (projectChart) projectChart.destroy();
+      const colors = ['#6366f1', '#8b5cf6', '#a855f7', '#10b981', '#f59e0b', '#ef4444', '#0ea5e9', '#ec4899'];
+      projectChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: data.map(d => d[0]),
+          datasets: [{ data: data.map(d => d[1].tokens), backgroundColor: colors.slice(0, data.length) }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'right', labels: { color: '#64748b', boxWidth: 12, padding: 8, font: { size: 10 } } }
+          }
+        }
+      });
+    }
+
+    async function loadClaudeSettings() {
+      try {
+        const res = await fetch('/api/claude-settings');
+        const data = await res.json();
+        const days = data.cleanupPeriodDays || 30;
+        document.getElementById('retentionDays').textContent = days + ' days';
+
+        const el = document.getElementById('retentionSetting');
+        if (days < 365) {
+          el.classList.add('warning');
+          el.title = 'Low retention! Click to increase to preserve history.';
+        } else {
+          el.classList.remove('warning');
+          el.title = 'Claude history retention setting';
+        }
+      } catch (err) {
+        console.error('Failed to load Claude settings:', err);
+        document.getElementById('retentionDays').textContent = 'Error';
+      }
+    }
+
+    async function showRetentionDialog() {
+      const current = document.getElementById('retentionDays').textContent.replace(' days', '');
+      const newVal = prompt(
+        'Set Claude history retention period (days).\n\n' +
+        'Recommended: 9999 to keep all history for tracking.\n' +
+        'Current value: ' + current,
+        '9999'
+      );
+
+      if (newVal === null) return;
+      const days = parseInt(newVal, 10);
+      if (isNaN(days) || days < 1) {
+        alert('Please enter a valid number of days.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/claude-settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cleanupPeriodDays: days })
+        });
+        const data = await res.json();
+        if (data.success) {
+          loadClaudeSettings();
+          alert('Retention updated to ' + days + ' days.');
+        } else {
+          alert('Failed to update: ' + (data.error || 'Unknown error'));
+        }
+      } catch (err) {
+        alert('Failed to update: ' + err.message);
+      }
+    }
+
+    loadData();
+    loadClaudeSettings();
+  </script>
+</body>
+</html>

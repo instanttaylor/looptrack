@@ -1,0 +1,16 @@
+{
+  "name": "looptrack",
+  "version": "1.0.0",
+  "description": "Track AI coding assistant usage across Claude Code, Codex, and more",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "sync": "node src/sync.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": ["claude", "codex", "usage", "tracking", "ai"],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
