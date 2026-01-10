@@ -2,7 +2,9 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { sync, loadAllData, getMachineId } = require('./src/sync');
+const { exec } = require('child_process');
+const { sync, loadAllData, getMachineId, getCloudDir, saveCloudDir, DATA_DIR } = require('./src/sync');
+const { syncWithCloud } = require('./src/cloudSync');
 
 const app = express();
 const PORT = process.env.PORT || 3456;
@@ -211,6 +213,91 @@ app.post('/api/claude-settings', (req, res) => {
 
     fs.writeFileSync(CLAUDE_SETTINGS_FILE, JSON.stringify(settings, null, 2));
     res.json({ success: true, cleanupPeriodDays: settings.cleanupPeriodDays });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// API: Get cloud sync folder
+app.get('/api/cloud-dir', (req, res) => {
+  try {
+    const cloudDir = getCloudDir();
+    res.json({
+      cloudDir: cloudDir || null,
+      isConfigured: !!cloudDir
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// API: Set cloud sync folder directly
+app.post('/api/cloud-dir', (req, res) => {
+  try {
+    const { cloudDir } = req.body;
+    if (!cloudDir) {
+      return res.status(400).json({ error: 'cloudDir required' });
+    }
+
+    // Validate the path exists and is a directory
+    if (!fs.existsSync(cloudDir)) {
+      return res.status(400).json({ error: 'Directory does not exist' });
+    }
+    const stat = fs.statSync(cloudDir);
+    if (!stat.isDirectory()) {
+      return res.status(400).json({ error: 'Path is not a directory' });
+    }
+
+    saveCloudDir(cloudDir);
+
+    // Immediately sync with the new cloud folder
+    const machineId = getMachineId();
+    if (machineId) {
+      syncWithCloud(DATA_DIR, cloudDir, machineId);
+    }
+
+    res.json({ cloudDir, success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// API: Open native folder picker (macOS)
+app.post('/api/cloud-dir/pick', (req, res) => {
+  const script = `osascript -e 'POSIX path of (choose folder with prompt "Choose cloud sync folder for LoopTrack")'`;
+
+  exec(script, (err, stdout, stderr) => {
+    if (err) {
+      // User cancelled or error
+      return res.json({ cancelled: true });
+    }
+
+    const folder = stdout.trim();
+    if (!folder) {
+      return res.json({ cancelled: true });
+    }
+
+    try {
+      saveCloudDir(folder);
+
+      // Immediately sync with the new cloud folder
+      const machineId = getMachineId();
+      if (machineId) {
+        syncWithCloud(DATA_DIR, folder, machineId);
+      }
+
+      res.json({ cloudDir: folder, success: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+});
+
+// API: Clear cloud sync folder
+app.delete('/api/cloud-dir', (req, res) => {
+  try {
+    saveCloudDir(null);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

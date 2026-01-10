@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "sync": "node src/sync.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "bun test"
   },
   "keywords": ["claude", "codex", "usage", "tracking", "ai"],
   "license": "MIT",

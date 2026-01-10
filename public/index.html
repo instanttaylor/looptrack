@@ -296,6 +296,7 @@
     }
     .retention-setting:hover { border-color: var(--accent); }
     .retention-setting.warning { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
+    .retention-setting.configured { border-color: var(--green); background: rgba(5,150,105,0.1); }
   </style>
 </head>
 <body>
@@ -309,6 +310,10 @@
         <select id="machineFilter" onchange="applyMachineFilter()" style="padding:0.4rem 0.75rem;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;background:var(--bg-card);">
           <option value="">All Machines</option>
         </select>
+        <div class="retention-setting" id="cloudSyncSetting" onclick="pickCloudFolder()" title="Cloud sync folder for multi-machine backup">
+          <span style="font-size:0.7rem;color:var(--text-dim);">Cloud:</span>
+          <span id="cloudSyncDisplay" style="font-weight:500;">Not set</span>
+        </div>
         <div class="retention-setting" id="retentionSetting" onclick="showRetentionDialog()" title="Claude history retention setting">
           <span style="font-size:0.7rem;color:var(--text-dim);">Retention:</span>
           <span id="retentionDays" style="font-weight:500;">—</span>
@@ -1147,8 +1152,82 @@
       }
     }
 
+    // Cloud sync folder functions
+    async function loadCloudSettings() {
+      try {
+        const res = await fetch('/api/cloud-dir');
+        const data = await res.json();
+        const el = document.getElementById('cloudSyncSetting');
+        const display = document.getElementById('cloudSyncDisplay');
+
+        if (data.isConfigured && data.cloudDir) {
+          // Show just the folder name, full path on hover
+          const folderName = data.cloudDir.split('/').filter(Boolean).pop() || data.cloudDir;
+          display.textContent = folderName;
+          el.title = 'Cloud sync: ' + data.cloudDir;
+          el.classList.remove('warning');
+          el.classList.add('configured');
+        } else {
+          display.textContent = 'Not set';
+          el.title = 'Click to set up cloud sync for multi-machine backup';
+          el.classList.add('warning');
+          el.classList.remove('configured');
+        }
+      } catch (err) {
+        console.error('Failed to load cloud settings:', err);
+        document.getElementById('cloudSyncDisplay').textContent = 'Error';
+      }
+    }
+
+    async function pickCloudFolder() {
+      const el = document.getElementById('cloudSyncSetting');
+      const currentlyConfigured = el.classList.contains('configured');
+
+      if (currentlyConfigured) {
+        const action = confirm(
+          'Cloud sync is currently configured.\n\n' +
+          'Click OK to choose a new folder, or Cancel to clear the setting.'
+        );
+        if (!action) {
+          // User wants to clear
+          if (confirm('Are you sure you want to disable cloud sync?')) {
+            try {
+              await fetch('/api/cloud-dir', { method: 'DELETE' });
+              loadCloudSettings();
+              alert('Cloud sync disabled.');
+            } catch (err) {
+              alert('Failed to disable: ' + err.message);
+            }
+          }
+          return;
+        }
+      }
+
+      // Open native folder picker
+      try {
+        const res = await fetch('/api/cloud-dir/pick', { method: 'POST' });
+        const data = await res.json();
+
+        if (data.cancelled) {
+          // User cancelled picker
+          return;
+        }
+
+        if (data.success) {
+          loadCloudSettings();
+          loadData(); // Refresh to pick up any synced data
+          alert('Cloud sync folder set to:\n' + data.cloudDir + '\n\nYour data will now sync to this folder.');
+        } else {
+          alert('Failed to set folder: ' + (data.error || 'Unknown error'));
+        }
+      } catch (err) {
+        alert('Failed to open folder picker: ' + err.message);
+      }
+    }
+
     loadData();
     loadClaudeSettings();
+    loadCloudSettings();
   </script>
 </body>
 </html>

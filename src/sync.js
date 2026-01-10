@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const readline = require('readline');
+const { syncWithCloud } = require('./cloudSync');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const IDENTITY_FILE = path.join(os.homedir(), '.looptrack', 'identity.json');
@@ -28,6 +29,37 @@ function saveMachineId(machineId) {
     fs.mkdirSync(dir, { recursive: true });
   }
   fs.writeFileSync(IDENTITY_FILE, JSON.stringify({ machineId }, null, 2));
+}
+
+// Get cloud sync directory from identity file
+function getCloudDir() {
+  try {
+    if (fs.existsSync(IDENTITY_FILE)) {
+      const identity = JSON.parse(fs.readFileSync(IDENTITY_FILE, 'utf8'));
+      return identity.cloudDir || null;
+    }
+  } catch (err) {
+    console.error('Warning: Could not load cloud dir:', err.message);
+  }
+  return null;
+}
+
+// Save cloud sync directory to identity file
+function saveCloudDir(cloudDir) {
+  const dir = path.dirname(IDENTITY_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  let identity = {};
+  if (fs.existsSync(IDENTITY_FILE)) {
+    try {
+      identity = JSON.parse(fs.readFileSync(IDENTITY_FILE, 'utf8'));
+    } catch (err) {}
+  }
+
+  identity.cloudDir = cloudDir;
+  fs.writeFileSync(IDENTITY_FILE, JSON.stringify(identity, null, 2));
 }
 
 function getDefaultMachineId() {
@@ -205,6 +237,13 @@ async function sync(providedMachineId) {
 
   saveData(data, machineId);
 
+  // Sync with cloud if configured
+  const cloudDir = getCloudDir();
+  if (cloudDir) {
+    console.log(`Syncing with cloud folder: ${cloudDir}`);
+    syncWithCloud(DATA_DIR, cloudDir, machineId);
+  }
+
   console.log(`Synced: ${newCount} new, ${updatedCount} updated, ${Object.keys(sessions).length} total sessions`);
   return { ...data, machineId };
 }
@@ -214,4 +253,4 @@ if (require.main === module) {
   sync().catch(console.error);
 }
 
-module.exports = { sync, loadExistingData, loadAllData, getMachineId, getProjectName };
+module.exports = { sync, loadExistingData, loadAllData, getMachineId, getProjectName, getCloudDir, saveCloudDir, DATA_DIR };

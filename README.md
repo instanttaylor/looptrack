@@ -32,11 +32,57 @@ Then open http://localhost:3456
 - **Sync** - Click the Sync button (or run `npm run sync`) to pull latest usage from Claude Code
 - **Groups** - Organize projects into groups in the Groups tab for better tracking
 - **Machine filter** - If you have multiple machines, filter by machine or view combined
+- **Cloud sync** - Set up a sync folder to backup and share data across machines
+
+## Cloud Sync
+
+If you use Claude Code on multiple machines (laptop, desktop, work machine), you probably want to see combined usage across all of them. Cloud sync makes this easy.
+
+**Why it's useful:**
+- See total token usage and costs across all your machines in one dashboard
+- Keep a backup of your usage data in iCloud, Dropbox, or any synced folder
+- Works offline - local data is always available, cloud sync happens in the background
+
+**How it works:**
+1. Click the "Cloud: Not set" button in the dashboard header
+2. A native folder picker opens - select a folder in iCloud Drive, Dropbox, or similar
+3. Your local usage file is pushed to that folder
+4. Other machines' usage files are pulled from that folder
+5. Every sync after that keeps everything in sync
+
+Each machine maintains its own `usage-{machineId}.json` file, so there are no conflicts. The dashboard aggregates all files automatically.
+
+**Setup on each machine:**
+```bash
+# On machine 1: set cloud folder to iCloud
+# (click Cloud button in UI, select ~/Library/Mobile Documents/com~apple~CloudDocs/looptrack-data)
+
+# On machine 2: set the same cloud folder
+# (the folder picker will show the same iCloud path)
+```
+
+Your `~/.looptrack/identity.json` will include the cloud folder path:
+```json
+{
+  "machineId": "taylor-mbp",
+  "cloudDir": "/Users/taylor/Library/Mobile Documents/com~apple~CloudDocs/looptrack-data"
+}
+```
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 18+ (or Bun)
 - Claude Code installed with some usage history
+
+## Development
+
+```bash
+# Run tests
+bun test
+
+# Run in dev mode (auto-reload)
+npm run dev
+```
 
 ## Files (local, not tracked)
 
