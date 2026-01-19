@@ -95,6 +95,47 @@ function getProjectName(projectPath) {
   return projectPath.split('/').pop() || projectPath;
 }
 
+// Generate a unique session key - handles subagents that share the same sessionId
+function getSessionKey(session) {
+  // Subagents all have sessionId "subagents" but different projectPaths with UUIDs
+  // e.g., "-Users-taylor-Development-looptrack/272cd730-d6f2-490d-9a3a-02733e824f45"
+  if (session.sessionId === 'subagents' && session.projectPath) {
+    return `subagents-${session.projectPath}`;
+  }
+  return session.sessionId || session.id || `${session.projectPath}-${session.startTime}`;
+}
+
+// Merge session data, preserving maximum values to prevent data loss
+function mergeSession(existing, incoming, projectPath, projectName) {
+  const base = {
+    ...incoming,
+    projectPath,
+    projectName,
+    syncedAt: new Date().toISOString()
+  };
+
+  if (!existing) return base;
+
+  return {
+    ...base,
+    // Keep maximum token counts (ccusage can return lower values over time)
+    inputTokens: Math.max(existing.inputTokens || 0, incoming.inputTokens || 0),
+    outputTokens: Math.max(existing.outputTokens || 0, incoming.outputTokens || 0),
+    cacheCreationTokens: Math.max(existing.cacheCreationTokens || 0, incoming.cacheCreationTokens || 0),
+    cacheReadTokens: Math.max(existing.cacheReadTokens || 0, incoming.cacheReadTokens || 0),
+    totalTokens: Math.max(existing.totalTokens || 0, incoming.totalTokens || 0),
+    totalCost: Math.max(existing.totalCost || 0, incoming.totalCost || 0),
+    // Keep most recent activity date
+    lastActivity: [existing.lastActivity, incoming.lastActivity].filter(Boolean).sort().pop() || incoming.lastActivity,
+    // Merge model arrays
+    modelsUsed: [...new Set([...(existing.modelsUsed || []), ...(incoming.modelsUsed || [])])],
+    // Preserve existing model breakdowns if incoming has fewer (data loss protection)
+    modelBreakdowns: (incoming.modelBreakdowns?.length >= (existing.modelBreakdowns?.length || 0))
+      ? incoming.modelBreakdowns
+      : existing.modelBreakdowns
+  };
+}
+
 function loadExistingData(machineId) {
   const dataFile = machineId ? getDataFile(machineId) : null;
   try {
@@ -196,13 +237,13 @@ async function sync(providedMachineId) {
     return { ...existing, machineId };
   }
 
-  // Merge sessions by ID
+  // Merge sessions by unique key
   const sessions = { ...existing.sessions };
   let newCount = 0;
   let updatedCount = 0;
 
   for (const session of ccusageData.sessions) {
-    const id = session.sessionId || session.id || `${session.projectPath}-${session.startTime}`;
+    const id = getSessionKey(session);
     if (!sessions[id]) {
       newCount++;
     } else {
@@ -213,12 +254,8 @@ async function sync(providedMachineId) {
       ? session.projectPath
       : decodeProjectPath(session.sessionId);
 
-    sessions[id] = {
-      ...session,
-      projectPath,
-      projectName: getProjectName(projectPath),
-      syncedAt: new Date().toISOString()
-    };
+    // Merge with existing data, preserving maximum values
+    sessions[id] = mergeSession(existing.sessions[id], session, projectPath, getProjectName(projectPath));
   }
 
   const data = {
