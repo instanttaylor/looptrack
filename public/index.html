@@ -490,6 +490,37 @@
       return projectPath.split('/').pop() || projectPath;
     }
 
+    // Extract parent project path from subagent paths
+    // e.g., "-Users-taylor-Development-looptrack/272cd730-d6f2-490d-9a3a-02733e824f45" -> "/Users/taylor/Development/looptrack"
+    // Format: dash-encoded-path/uuid-with-dashes
+    function getParentProjectPath(projectPath) {
+      if (!projectPath) return 'Unknown';
+      let normalized = projectPath;
+
+      // Check for dash-encoded path with UUID suffix: -Path-To-Project/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+      const dashEncodedWithUuid = /^(-[^/]+)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const match = normalized.match(dashEncodedWithUuid);
+      if (match) {
+        // Extract the dash-encoded path part and convert to normal path
+        normalized = match[1].replace(/^-/, '/').replace(/-/g, '/');
+        return normalized;
+      }
+
+      // Also handle already-normalized paths with UUID suffix
+      const normalPathWithUuid = /^(\/[^/].*?)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const normalMatch = normalized.match(normalPathWithUuid);
+      if (normalMatch) {
+        return normalMatch[1];
+      }
+
+      // If it's just a dash-encoded path without UUID, normalize it
+      if (normalized.startsWith('-')) {
+        normalized = normalized.replace(/^-/, '/').replace(/-/g, '/');
+      }
+
+      return normalized;
+    }
+
     function getFilteredSessions() {
       const sessions = Object.values(appData.sessions || {});
       if (!selectedMachine) return sessions;
@@ -911,7 +942,9 @@
 
       const projectTotals = {};
       sessions.forEach(s => {
-        const path = s.projectPath || 'Unknown';
+        const rawPath = s.projectPath || 'Unknown';
+        // Aggregate subagent sessions into their parent project
+        const path = getParentProjectPath(rawPath);
         const group = getProjectGroup(path) || 'Ungrouped';
         groupTotals[group] = groupTotals[group] || { cost: 0, sessions: 0, tokens: 0 };
         groupTotals[group].cost += s.totalCost || 0;
