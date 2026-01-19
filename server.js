@@ -47,7 +47,11 @@ app.get('/api/data', (req, res) => {
     const data = loadAllData();
     const config = loadConfig();
     const currentMachine = getMachineId();
-    res.json({ ...data, config, currentMachine });
+    // Convert daily object to sorted array for frontend
+    const dailyArray = Object.entries(data.daily || {})
+      .map(([date, day]) => ({ date, ...day }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+    res.json({ ...data, daily: dailyArray, config, currentMachine });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -98,56 +102,34 @@ app.post('/api/sync', async (req, res) => {
   }
 });
 
-// API: Daily breakdown
+// API: Daily breakdown - uses accurate daily data from ccusage
 app.get('/api/daily', (req, res) => {
   try {
     const data = loadAllData();
     const config = loadConfig();
-    const sessions = Object.values(data.sessions || {});
 
-    // Group by date
-    const daily = {};
-    sessions.forEach(s => {
-      const date = (s.lastActivity || s.startTime || s.date || '').split('T')[0];
-      if (!date) return;
+    // Use the accurate daily data from ccusage (stored during sync)
+    const dailyData = data.daily || {};
 
-      if (!daily[date]) {
-        daily[date] = {
-          date,
-          sessions: 0,
-          totalCost: 0,
-          inputTokens: 0,
-          outputTokens: 0,
-          projects: {},
-          groups: {}
-        };
-      }
-
-      daily[date].sessions++;
-      daily[date].totalCost += s.totalCost || s.cost || 0;
-      daily[date].inputTokens += s.inputTokens || 0;
-      daily[date].outputTokens += s.outputTokens || 0;
-
-      // Track by project
-      const projectPath = s.projectPath || 'Unknown';
-      const projectName = projectPath.split('/').pop() || projectPath;
-      if (!daily[date].projects[projectPath]) {
-        daily[date].projects[projectPath] = { name: projectName, path: projectPath, cost: 0, sessions: 0 };
-      }
-      daily[date].projects[projectPath].cost += s.totalCost || s.cost || 0;
-      daily[date].projects[projectPath].sessions++;
-
-      // Track by group
-      const group = getProjectGroup(projectPath, config.projectGroups) || 'Ungrouped';
-      if (!daily[date].groups[group]) {
-        daily[date].groups[group] = { cost: 0, sessions: 0 };
-      }
-      daily[date].groups[group].cost += s.totalCost || s.cost || 0;
-      daily[date].groups[group].sessions++;
-    });
+    // Convert to array format with additional computed fields
+    const daily = Object.entries(dailyData).map(([date, day]) => ({
+      date,
+      totalCost: day.totalCost || 0,
+      inputTokens: day.inputTokens || 0,
+      outputTokens: day.outputTokens || 0,
+      cacheCreationTokens: day.cacheCreationTokens || 0,
+      cacheReadTokens: day.cacheReadTokens || 0,
+      totalTokens: day.totalTokens || 0,
+      modelsUsed: day.modelsUsed || [],
+      modelBreakdowns: day.modelBreakdowns || [],
+      // Sessions count not available in daily data - can add later if needed
+      sessions: 0,
+      projects: {},
+      groups: {}
+    }));
 
     // Sort by date descending
-    const sorted = Object.values(daily).sort((a, b) => b.date.localeCompare(a.date));
+    const sorted = daily.sort((a, b) => b.date.localeCompare(a.date));
 
     res.json({ daily: sorted, config });
   } catch (err) {

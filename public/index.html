@@ -589,11 +589,11 @@
           `;
         }).join('');
 
-      // Charts - daily tokens
-      const dailyTokens = {};
-      sessions.forEach(s => {
-        const date = (s.lastActivity || s.startTime || '').split('T')[0];
-        if (date) dailyTokens[date] = (dailyTokens[date] || 0) + (s.inputTokens || 0) + (s.outputTokens || 0);
+      // Charts - daily tokens (use accurate daily data from ccusage)
+      const dailyData = appData.daily || [];
+      const dailyTokensMap = {};
+      dailyData.forEach(d => {
+        dailyTokensMap[d.date] = (d.inputTokens || 0) + (d.outputTokens || 0);
       });
 
       const last30 = [];
@@ -601,7 +601,7 @@
         const d = new Date();
         d.setDate(d.getDate() - i);
         const key = d.toISOString().split('T')[0];
-        last30.push({ date: key, tokens: dailyTokens[key] || 0 });
+        last30.push({ date: key, tokens: dailyTokensMap[key] || 0 });
       }
       renderDailyChart(last30);
 
@@ -646,63 +646,63 @@
     }
 
     function renderLast5DaysByGroup() {
-      const sessions = getFilteredSessions();
       const groups = appData.config?.projectGroups || {};
       const groupNames = Object.keys(groups);
-      if (groupNames.length === 0) {
-        document.getElementById('last5DaysGroups').innerHTML = '<div style="color:var(--text-dim);font-size:0.875rem;">No groups configured. Add groups in the Groups tab.</div>';
+
+      // Use accurate daily data from ccusage with per-project breakdown
+      const dailyData = appData.daily || [];
+      const last5Days = dailyData.slice(0, 5);
+
+      if (last5Days.length === 0) {
+        document.getElementById('last5DaysGroups').innerHTML = '<div style="color:var(--text-dim);font-size:0.875rem;">No daily data yet. Run sync.</div>';
         return;
       }
-
-      // Build daily group data
-      const dailyGroups = {};
-      sessions.forEach(s => {
-        const date = (s.lastActivity || '').split('T')[0];
-        const path = s.projectPath || 'Unknown';
-        const group = getProjectGroup(path);
-        if (!date || !group) return; // Skip if no group
-
-        if (!dailyGroups[date]) dailyGroups[date] = {};
-        if (!dailyGroups[date][group]) dailyGroups[date][group] = { tokens: 0, cost: 0 };
-        dailyGroups[date][group].tokens += (s.inputTokens || 0) + (s.outputTokens || 0);
-        dailyGroups[date][group].cost += s.totalCost || 0;
-      });
-
-      // Get last 5 days with data
-      const sortedDates = Object.keys(dailyGroups).sort((a, b) => b.localeCompare(a)).slice(0, 5);
 
       const colorMap = {};
       groupNames.forEach((g, i) => colorMap[g] = groupColors[i % groupColors.length]);
 
       const container = document.getElementById('last5DaysGroups');
-      container.innerHTML = sortedDates.map(date => {
-        const dayData = dailyGroups[date];
-        const dayTotal = Object.values(dayData).reduce((sum, g) => sum + g.tokens, 0);
+      container.innerHTML = last5Days.map(day => {
+        const dayTotal = day.totalCost || 0;
 
-        const groupBars = Object.entries(dayData)
-          .sort((a, b) => b[1].tokens - a[1].tokens)
-          .map(([name, data]) => {
-            const pct = dayTotal > 0 ? ((data.tokens / dayTotal) * 100).toFixed(0) : 0;
-            const color = colorMap[name] || '#64748b';
-            return `
-              <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem;">
-                <div style="width:10px;height:10px;border-radius:2px;background:${color};"></div>
-                <span style="font-size:0.8rem;min-width:80px;">${name}</span>
-                <div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;">
-                  <div style="width:${pct}%;height:100%;background:${color};"></div>
-                </div>
-                <span style="font-size:0.75rem;color:var(--text-dim);min-width:60px;text-align:right;">${formatTokens(data.tokens)}</span>
+        // Group projects by configured groups
+        const groupTotals = {};
+        const projects = day.projects || {};
+        Object.entries(projects).forEach(([projectPath, projectData]) => {
+          // Convert path format: -Users-taylor-Development-foo -> /Users/taylor/Development/foo
+          const normalizedPath = projectPath.replace(/-/g, '/').replace(/^\//, '/');
+          const group = getProjectGroup(normalizedPath) || 'Ungrouped';
+          if (!groupTotals[group]) groupTotals[group] = { cost: 0, tokens: 0 };
+          groupTotals[group].cost += projectData.totalCost || 0;
+          groupTotals[group].tokens += (projectData.inputTokens || 0) + (projectData.outputTokens || 0);
+        });
+
+        const sortedGroups = Object.entries(groupTotals)
+          .filter(([name]) => name !== 'Ungrouped')
+          .sort((a, b) => b[1].cost - a[1].cost);
+
+        const groupBars = sortedGroups.map(([name, data]) => {
+          const pct = dayTotal > 0 ? ((data.cost / dayTotal) * 100).toFixed(0) : 0;
+          const color = colorMap[name] || '#64748b';
+          return `
+            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem;">
+              <div style="width:10px;height:10px;border-radius:2px;background:${color};"></div>
+              <span style="font-size:0.8rem;min-width:80px;">${name}</span>
+              <div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;">
+                <div style="width:${pct}%;height:100%;background:${color};"></div>
               </div>
-            `;
-          }).join('');
+              <span style="font-size:0.75rem;color:var(--text-dim);min-width:60px;text-align:right;">${formatCost(data.cost)}</span>
+            </div>
+          `;
+        }).join('');
 
         return `
           <div style="margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid var(--border);">
             <div style="display:flex;justify-content:space-between;margin-bottom:0.5rem;">
-              <span style="font-weight:500;">${date}</span>
-              <span style="font-size:0.8rem;color:var(--text-dim);">${formatTokens(dayTotal)} total</span>
+              <span style="font-weight:500;">${day.date}</span>
+              <span style="font-size:0.8rem;color:var(--text-dim);">${formatCost(dayTotal)}</span>
             </div>
-            ${groupBars}
+            ${groupBars || '<div style="font-size:0.8rem;color:var(--text-dim);">No grouped projects</div>'}
           </div>
         `;
       }).join('');
@@ -711,43 +711,53 @@
     const groupColors = ['#6366f1', '#8b5cf6', '#a855f7', '#10b981', '#f59e0b', '#ef4444', '#0ea5e9', '#ec4899'];
 
     function renderDaily() {
-      const sessions = getFilteredSessions();
       const configGroups = Object.keys(appData.config?.projectGroups || {});
 
-      // Group by date
+      // Use accurate daily data from ccusage (not computed from sessions)
+      const dailyData = appData.daily || [];
       const daily = {};
       let totalTokensAllTime = 0;
-      sessions.forEach(s => {
-        const date = (s.lastActivity || '').split('T')[0];
-        if (!date) return;
-        if (!daily[date]) {
-          daily[date] = { date, sessions: 0, totalCost: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, groups: {}, projects: {} };
-        }
-        daily[date].sessions++;
-        daily[date].totalCost += s.totalCost || 0;
-        daily[date].inputTokens += s.inputTokens || 0;
-        daily[date].outputTokens += s.outputTokens || 0;
-        daily[date].totalTokens += (s.inputTokens || 0) + (s.outputTokens || 0);
-        totalTokensAllTime += (s.inputTokens || 0) + (s.outputTokens || 0);
 
-        const path = s.projectPath || 'Unknown';
-        const group = getProjectGroup(path) || 'Ungrouped';
+      // Convert daily array to object keyed by date, with group breakdowns
+      dailyData.forEach(d => {
+        const totalTokens = (d.inputTokens || 0) + (d.outputTokens || 0);
+        const groups = {};
+        const projects = {};
 
-        // Track by group
-        if (!daily[date].groups[group]) {
-          daily[date].groups[group] = { tokens: 0, cost: 0, sessions: 0 };
-        }
-        daily[date].groups[group].tokens += (s.inputTokens || 0) + (s.outputTokens || 0);
-        daily[date].groups[group].cost += s.totalCost || 0;
-        daily[date].groups[group].sessions++;
+        // Process per-project data into groups
+        Object.entries(d.projects || {}).forEach(([projectPath, projectData]) => {
+          const normalizedPath = projectPath.replace(/-/g, '/').replace(/^\//, '/');
+          const projectName = normalizedPath.split('/').pop() || normalizedPath;
+          const group = getProjectGroup(normalizedPath) || 'Ungrouped';
+          const tokens = (projectData.inputTokens || 0) + (projectData.outputTokens || 0);
 
-        // Track by project
-        if (!daily[date].projects[path]) {
-          daily[date].projects[path] = { name: path.split('/').pop(), path, group, cost: 0, sessions: 0, tokens: 0 };
-        }
-        daily[date].projects[path].cost += s.totalCost || 0;
-        daily[date].projects[path].sessions++;
-        daily[date].projects[path].tokens += (s.inputTokens || 0) + (s.outputTokens || 0);
+          // Add to groups
+          if (!groups[group]) groups[group] = { tokens: 0, cost: 0, sessions: 0 };
+          groups[group].tokens += tokens;
+          groups[group].cost += projectData.totalCost || 0;
+          groups[group].sessions++;
+
+          // Add to projects
+          projects[projectPath] = {
+            name: projectName,
+            path: normalizedPath,
+            group: group,
+            tokens: tokens,
+            cost: projectData.totalCost || 0
+          };
+        });
+
+        daily[d.date] = {
+          date: d.date,
+          sessions: Object.keys(d.projects || {}).length,
+          totalCost: d.totalCost || 0,
+          inputTokens: d.inputTokens || 0,
+          outputTokens: d.outputTokens || 0,
+          totalTokens: totalTokens,
+          groups: groups,
+          projects: projects
+        };
+        totalTokensAllTime += totalTokens;
       });
 
       const sorted = Object.values(daily).sort((a, b) => b.date.localeCompare(a.date));
@@ -852,6 +862,7 @@
       }).join('');
 
       // Sessions table (now in Daily tab)
+      const sessions = getFilteredSessions();
       const sortedSessions = sessions
         .sort((a, b) => (b.lastActivity || '').localeCompare(a.lastActivity || ''))
         .slice(0, 50);

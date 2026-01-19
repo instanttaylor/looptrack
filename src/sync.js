@@ -151,10 +151,11 @@ function loadExistingData(machineId) {
 // Load all machine data files (for server aggregation)
 function loadAllData() {
   const allSessions = {};
+  const allDaily = {};
   const machines = [];
 
   try {
-    if (!fs.existsSync(DATA_DIR)) return { sessions: {}, machines: [] };
+    if (!fs.existsSync(DATA_DIR)) return { sessions: {}, daily: {}, machines: [] };
 
     const files = fs.readdirSync(DATA_DIR).filter(f => f.startsWith('usage-') && f.endsWith('.json'));
 
@@ -167,6 +168,24 @@ function loadAllData() {
         for (const [id, session] of Object.entries(data.sessions || {})) {
           allSessions[id] = { ...session, machineId };
         }
+        // Aggregate daily data across machines (sum values for same dates)
+        for (const [date, day] of Object.entries(data.daily || {})) {
+          if (!allDaily[date]) {
+            allDaily[date] = { ...day, machineId };
+          } else {
+            // Sum values from multiple machines for the same date
+            allDaily[date] = {
+              ...allDaily[date],
+              inputTokens: (allDaily[date].inputTokens || 0) + (day.inputTokens || 0),
+              outputTokens: (allDaily[date].outputTokens || 0) + (day.outputTokens || 0),
+              cacheCreationTokens: (allDaily[date].cacheCreationTokens || 0) + (day.cacheCreationTokens || 0),
+              cacheReadTokens: (allDaily[date].cacheReadTokens || 0) + (day.cacheReadTokens || 0),
+              totalTokens: (allDaily[date].totalTokens || 0) + (day.totalTokens || 0),
+              totalCost: (allDaily[date].totalCost || 0) + (day.totalCost || 0),
+              modelsUsed: [...new Set([...(allDaily[date].modelsUsed || []), ...(day.modelsUsed || [])])],
+            };
+          }
+        }
       } catch (err) {
         console.error(`Warning: Could not load ${file}:`, err.message);
       }
@@ -175,7 +194,7 @@ function loadAllData() {
     console.error('Warning: Could not read data directory:', err.message);
   }
 
-  return { sessions: allSessions, machines };
+  return { sessions: allSessions, daily: allDaily, machines };
 }
 
 function saveData(data, machineId) {
@@ -199,6 +218,77 @@ function runCcusage() {
     console.log('Make sure you have Claude Code installed and have some usage data.');
     return null;
   }
+}
+
+function runCcusageDaily() {
+  try {
+    // Get daily breakdown with per-project instances from ccusage
+    const output = execSync('npx ccusage@latest daily --instances --json 2>/dev/null', {
+      encoding: 'utf8',
+      maxBuffer: 10 * 1024 * 1024
+    });
+    return JSON.parse(output);
+  } catch (err) {
+    console.error('Error running ccusage daily:', err.message);
+    return null;
+  }
+}
+
+// Merge daily data with per-project breakdown, preserving maximum values
+function mergeDailyData(existingDaily, incomingData) {
+  const daily = { ...(existingDaily || {}) };
+
+  // Handle new format: { projects: { projectPath: [days...] }, totals: {...} }
+  if (incomingData && incomingData.projects) {
+    // Process each project's daily data
+    for (const [projectPath, days] of Object.entries(incomingData.projects)) {
+      for (const day of days) {
+        const date = day.date;
+        if (!daily[date]) {
+          daily[date] = { date, totalCost: 0, inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 0, modelsUsed: [], projects: {} };
+        }
+        // Ensure projects object exists for existing data
+        if (!daily[date].projects) {
+          daily[date].projects = {};
+        }
+
+        // Add/update project data for this date
+        const existing = daily[date].projects[projectPath];
+        if (!existing) {
+          daily[date].projects[projectPath] = { ...day, projectPath, projectName: getProjectName(projectPath.replace(/-/g, '/').replace(/^\//, '/')) };
+        } else {
+          // Keep max values
+          daily[date].projects[projectPath] = {
+            ...day,
+            projectPath,
+            projectName: existing.projectName,
+            inputTokens: Math.max(existing.inputTokens || 0, day.inputTokens || 0),
+            outputTokens: Math.max(existing.outputTokens || 0, day.outputTokens || 0),
+            cacheCreationTokens: Math.max(existing.cacheCreationTokens || 0, day.cacheCreationTokens || 0),
+            cacheReadTokens: Math.max(existing.cacheReadTokens || 0, day.cacheReadTokens || 0),
+            totalTokens: Math.max(existing.totalTokens || 0, day.totalTokens || 0),
+            totalCost: Math.max(existing.totalCost || 0, day.totalCost || 0),
+          };
+        }
+      }
+    }
+
+    // Recalculate daily totals from projects
+    for (const date of Object.keys(daily)) {
+      const projects = Object.values(daily[date].projects || {});
+      if (projects.length > 0) {
+        daily[date].inputTokens = projects.reduce((sum, p) => sum + (p.inputTokens || 0), 0);
+        daily[date].outputTokens = projects.reduce((sum, p) => sum + (p.outputTokens || 0), 0);
+        daily[date].cacheCreationTokens = projects.reduce((sum, p) => sum + (p.cacheCreationTokens || 0), 0);
+        daily[date].cacheReadTokens = projects.reduce((sum, p) => sum + (p.cacheReadTokens || 0), 0);
+        daily[date].totalTokens = projects.reduce((sum, p) => sum + (p.totalTokens || 0), 0);
+        daily[date].totalCost = projects.reduce((sum, p) => sum + (p.totalCost || 0), 0);
+        daily[date].modelsUsed = [...new Set(projects.flatMap(p => p.modelsUsed || []))];
+      }
+    }
+  }
+
+  return daily;
 }
 
 // Migrate old usage.json to new format
@@ -231,8 +321,9 @@ async function sync(providedMachineId) {
 
   const existing = loadExistingData(machineId);
   const ccusageData = runCcusage();
+  const ccusageDailyData = runCcusageDaily();
 
-  if (!ccusageData || !ccusageData.sessions) {
+  if ((!ccusageData || !ccusageData.sessions) && (!ccusageDailyData || !ccusageDailyData.daily)) {
     console.log('No data to sync.');
     return { ...existing, machineId };
   }
@@ -258,8 +349,13 @@ async function sync(providedMachineId) {
     sessions[id] = mergeSession(existing.sessions[id], session, projectPath, getProjectName(projectPath));
   }
 
+  // Merge daily data for accurate per-day tracking
+  const daily = mergeDailyData(existing.daily, ccusageDailyData);
+  const dailyCount = Object.keys(daily).length;
+
   const data = {
     sessions,
+    daily,
     syncs: [
       ...existing.syncs,
       {
@@ -281,7 +377,7 @@ async function sync(providedMachineId) {
     syncWithCloud(DATA_DIR, cloudDir, machineId);
   }
 
-  console.log(`Synced: ${newCount} new, ${updatedCount} updated, ${Object.keys(sessions).length} total sessions`);
+  console.log(`Synced: ${newCount} new, ${updatedCount} updated, ${Object.keys(sessions).length} total sessions, ${dailyCount} days`);
   return { ...data, machineId };
 }
 
